@@ -1,4 +1,4 @@
-.PHONY: build clean
+.PHONY: build clean docker-build docker-build-arm64 push_image build_local
 
 GO_ENV=CGO_ENABLED=1
 GO_MODULE=GO111MODULE=on
@@ -37,16 +37,24 @@ build_all: pre_build build docker-build
 build_all_arm64: pre_build build docker-build-arm64
 
 docker-build:
-	GOOS="linux" GOARCH="amd64" go build $(GO_FLAGS) -o build/_output/bin/chaosblade-operator cmd/manager/main.go
-	docker buildx build -f build/image/amd/Dockerfile --platform=linux/amd64 -t ghcr.io/chaosblade-io/chaosblade-operator:${BLADE_VERSION} .
+	docker buildx build \
+		--build-arg BLADE_VERSION=$(BLADE_VERSION) \
+		--build-arg BLADE_VENDOR=$(BLADE_VENDOR) \
+		-f build/image/amd/Dockerfile \
+		--platform=linux/amd64 \
+		-t ghcr.io/chaosblade-io/chaosblade-operator:$(BLADE_VERSION) .
 
 docker-build-arm64:
-	GOOS="linux" GOARCH="arm64" go build $(GO_FLAGS) -o build/_output/bin/chaosblade-operator cmd/manager/main.go
-	docker buildx build -f build/image/arm/Dockerfile  --platform=linux/arm64  -t ghcr.io/chaosblade-io/chaosblade-operator-arm64:${BLADE_VERSION} .
+	docker buildx build \
+		--build-arg BLADE_VERSION=$(BLADE_VERSION) \
+		--build-arg BLADE_VENDOR=$(BLADE_VENDOR) \
+		-f build/image/arm/Dockerfile \
+		--platform=linux/arm64 \
+		-t ghcr.io/chaosblade-io/chaosblade-operator-arm64:$(BLADE_VERSION) .
 
 push_image:
-	docker push ghcr.io/chaosblade-io/chaosblade-operator:${BLADE_VERSION}
-	docker push ghcr.io/chaosblade-io/chaosblade-operator-arm64:${BLADE_VERSION}
+	docker push ghcr.io/chaosblade-io/chaosblade-operator:$(BLADE_VERSION)
+	docker push ghcr.io/chaosblade-io/chaosblade-operator-arm64:$(BLADE_VERSION)
 
 #operator-sdk 0.19.0 build
 build_all_operator: pre_build build build_image
@@ -89,6 +97,12 @@ test:
 	go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 # clean all build result
 clean:
+	rm -rf build/_output
 	go clean ./...
 	rm -rf $(BUILD_TARGET)
 	rm -rf $(BUILD_IMAGE_PATH)/$(BUILD_TARGET_DIR_NAME)
+
+# 本地构建目标
+build_local: pre_build build_yaml
+	$(GO) build $(GO_FLAGS) -o $(BUILD_TARGET_BIN)/chaosblade-operator cmd/manager/main.go
+	$(GO) build $(GO_FLAGS) -o $(BUILD_TARGET_BIN)/chaos_fuse cmd/hookfs/main.go
